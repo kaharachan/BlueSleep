@@ -1,0 +1,2 @@
+-keep class com.bluesleep.module.XposedEntry
+-keep class de.robv.android.xposed.** { *; }
