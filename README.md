@@ -55,7 +55,7 @@ Bạn nghe nhạc, podcast hay ASMR qua tai nghe Bluetooth trước khi ngủ. N
 1. Tải APK từ [Releases](https://github.com/kaharachan/BlueSleep/releases)
 2. Cài đặt lên thiết bị
 3. Mở trình quản lý root → **cấp quyền root cho BlueSleep**
-4. *(Tùy chọn)* LSPosed Manager → bật module → scope: `android` → reboot
+4. *(Tùy chọn)* LSPosed Manager → bật module → chọn: `Framework hệ thống` → reboot
 
 ---
 
