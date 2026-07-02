@@ -90,9 +90,16 @@ Bluetooth kết nối  →  Nhạc đang phát?
 
 ## Về LSPosed Module
 
-Module hook `ActivityManagerService.forceStopPackage` để ngăn hệ thống buộc dừng BlueSleep. Lưu ý:
+Module hook nhiều lớp bảo vệ trong Android framework:
+- `forceStopPackage` / `forceStopPackageAsUser` — chặn buộc dừng
+- `killBackgroundProcesses` — chặn kill nền
+- `removeTask` — chặn xóa task khỏi recents (bảo vệ khi "clear all" trên MIUI/HyperOS)
+- `setPackageStoppedState` — ngăn đánh dấu app là "stopped"
+- `systemReady` — tự khởi động service sau boot
+
+Lưu ý:
 - Đây là API nội bộ Android, có thể thay đổi giữa các ROM và phiên bản
-- Module chỉ chặn lệnh `forceStopPackage`, **không** bảo vệ khỏi Low Memory Killer, crash, hoặc thu hồi tiến trình bởi kernel
+- Không bảo vệ khỏi Low Memory Killer hoặc kernel kill
 - Hoàn toàn tùy chọn — app vẫn hoạt động bình thường chỉ với root
 
 ---
@@ -122,8 +129,10 @@ cd BlueSleep
 app/src/main/java/com/bluesleep/module/
 ├── MainActivity.java          UI (programmatic, không XML layout)
 ├── AudioMonitorService.java   Foreground service + background thread monitor
-├── XposedEntry.java           LSPosed hook chống force-stop
-└── BootReceiver.java          Auto-start khi boot (có kiểm tra quyền)
+├── XposedEntry.java           LSPosed hook chống force-stop + kill + clear all
+├── BootReceiver.java          Auto-start khi boot
+├── HeartbeatReceiver.java     AlarmManager heartbeat mỗi 5 phút
+└── ServiceRestartWorker.java  WorkManager backup restart mỗi 15 phút
 ```
 
 ---

@@ -26,6 +26,8 @@ public class XposedEntry implements IXposedHookLoadPackage {
         setActiveProperty();
 
         hookForceStop(lpparam.classLoader);
+        hookKillBackground(lpparam.classLoader);
+        hookRemoveTask(lpparam.classLoader);
         hookStoppedState(lpparam.classLoader);
         hookSystemReady(lpparam.classLoader);
     }
@@ -86,6 +88,76 @@ public class XposedEntry implements IXposedHookLoadPackage {
                 }
             }
         } catch (Throwable ignored) {}
+    }
+
+    private void hookKillBackground(ClassLoader cl) {
+        String[] classNames = {
+                "com.android.server.am.ActivityManagerService",
+                "com.android.server.am.ActivityManagerShellCommand"
+        };
+        for (String className : classNames) {
+            try {
+                Class<?> cls = XposedHelpers.findClass(className, cl);
+                for (Method m : cls.getDeclaredMethods()) {
+                    if (("killBackgroundProcesses".equals(m.getName())
+                            || "killAllBackgroundProcesses".equals(m.getName()))
+                            && m.getParameterTypes().length >= 1
+                            && m.getParameterTypes()[0] == String.class) {
+                        XposedBridge.hookMethod(m, new XC_MethodHook() {
+                            @Override
+                            protected void beforeHookedMethod(MethodHookParam param) {
+                                if (PKG.equals(param.args[0])) {
+                                    XposedBridge.log(TAG + ": Blocked " + m.getName());
+                                    param.setResult(null);
+                                }
+                            }
+                        });
+                        XposedBridge.log(TAG + ": Hooked " + m.getName() + " in " + className);
+                    }
+                }
+            } catch (Throwable ignored) {}
+        }
+    }
+
+    private void hookRemoveTask(ClassLoader cl) {
+        String[] classNames = {
+                "com.android.server.wm.ActivityTaskManagerService",
+                "com.android.server.am.ActivityManagerService"
+        };
+        for (String className : classNames) {
+            try {
+                Class<?> cls = XposedHelpers.findClass(className, cl);
+                for (Method m : cls.getDeclaredMethods()) {
+                    if ("removeTask".equals(m.getName()) && m.getParameterTypes().length >= 1
+                            && m.getParameterTypes()[0] == int.class) {
+                        XposedBridge.hookMethod(m, new XC_MethodHook() {
+                            @Override
+                            protected void beforeHookedMethod(MethodHookParam param) {
+                                try {
+                                    int taskId = (int) param.args[0];
+                                    Object rootWindowContainer = XposedHelpers.getObjectField(param.thisObject, "mRootWindowContainer");
+                                    if (rootWindowContainer == null) return;
+                                    Object task = XposedHelpers.callMethod(rootWindowContainer, "anyTaskForId", taskId);
+                                    if (task == null) return;
+                                    Intent baseIntent = (Intent) XposedHelpers.getObjectField(task, "intent");
+                                    if (baseIntent == null) return;
+                                    String pkg = baseIntent.getComponent() != null
+                                            ? baseIntent.getComponent().getPackageName()
+                                            : baseIntent.getPackage();
+                                    if (PKG.equals(pkg)) {
+                                        XposedBridge.log(TAG + ": Blocked removeTask for BlueSleep (taskId=" + taskId + ")");
+                                        param.setResult(false);
+                                    }
+                                } catch (Throwable t) {
+                                    // Fallback: don't block if we can't determine the package
+                                }
+                            }
+                        });
+                        XposedBridge.log(TAG + ": Hooked removeTask in " + className);
+                    }
+                }
+            } catch (Throwable ignored) {}
+        }
     }
 
     // Prevent Android from marking BlueSleep as "stopped"

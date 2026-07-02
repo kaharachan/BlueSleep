@@ -13,6 +13,9 @@ import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.net.Uri;
+import android.os.PowerManager;
+import android.provider.Settings;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.TypedValue;
@@ -87,6 +90,7 @@ public class MainActivity extends AppCompatActivity {
         setContentView(buildUI());
         loadSettings();
         checkAndRequestRoot();
+        requestBatteryOptimizationExemption();
         requestPermissionsAndStart();
     }
 
@@ -152,6 +156,17 @@ public class MainActivity extends AppCompatActivity {
             permissionLauncher.launch(needed.toArray(new String[0]));
         } else if (prefs.getBoolean("enabled", true)) {
             startMonitorService();
+        }
+    }
+
+    private void requestBatteryOptimizationExemption() {
+        PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+        if (pm != null && !pm.isIgnoringBatteryOptimizations(getPackageName())) {
+            try {
+                Intent intent = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+                intent.setData(Uri.parse("package:" + getPackageName()));
+                startActivity(intent);
+            } catch (Exception ignored) {}
         }
     }
 

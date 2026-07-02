@@ -26,6 +26,10 @@ import android.util.Log;
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
 
+import androidx.work.ExistingPeriodicWorkPolicy;
+import androidx.work.PeriodicWorkRequest;
+import androidx.work.WorkManager;
+
 import java.io.BufferedReader;
 import java.io.DataOutputStream;
 import java.io.InputStreamReader;
@@ -165,6 +169,7 @@ public class AudioMonitorService extends Service {
         createNotificationChannel();
         registerBluetoothReceiver();
         scheduleHeartbeat();
+        scheduleWorkManager();
     }
 
     @Override
@@ -194,6 +199,34 @@ public class AudioMonitorService extends Service {
         handlerThread.quitSafely();
         // If service was killed but user wants it running, heartbeat alarm will restart it
         super.onDestroy();
+    }
+
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        super.onTaskRemoved(rootIntent);
+        Log.d(TAG, "Task removed (swiped from recents), scheduling restart");
+        scheduleImmediateRestart();
+    }
+
+    private void scheduleImmediateRestart() {
+        try {
+            AlarmManager am = (AlarmManager) getSystemService(ALARM_SERVICE);
+            if (am == null) return;
+            Intent intent = new Intent(this, HeartbeatReceiver.class);
+            intent.setAction(ACTION_HEARTBEAT);
+            PendingIntent pi = PendingIntent.getBroadcast(this, 1, intent,
+                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,
+                        System.currentTimeMillis() + 3000, pi);
+            } else {
+                am.setExact(AlarmManager.RTC_WAKEUP,
+                        System.currentTimeMillis() + 3000, pi);
+            }
+            Log.d(TAG, "Scheduled immediate restart via alarm in 3s");
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to schedule restart: " + e.getMessage());
+        }
     }
 
     @Override
@@ -433,6 +466,21 @@ public class AudioMonitorService extends Service {
                 System.currentTimeMillis() + HEARTBEAT_INTERVAL_MS,
                 HEARTBEAT_INTERVAL_MS, pi);
         Log.d(TAG, "Heartbeat alarm scheduled every 5 min");
+    }
+
+    private void scheduleWorkManager() {
+        try {
+            PeriodicWorkRequest workRequest = new PeriodicWorkRequest.Builder(
+                    ServiceRestartWorker.class, 15, TimeUnit.MINUTES)
+                    .build();
+            WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+                    "bluesleep_restart",
+                    ExistingPeriodicWorkPolicy.KEEP,
+                    workRequest);
+            Log.d(TAG, "WorkManager periodic restart scheduled");
+        } catch (Exception e) {
+            Log.e(TAG, "WorkManager scheduling failed: " + e.getMessage());
+        }
     }
 
     private void registerBluetoothReceiver() {
